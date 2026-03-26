@@ -154,10 +154,15 @@ export default function ChatPage() {
   const [initialized, setInitialized] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Add configurable API base URL (public env var, available in client builds)
-  const API_BASE =
-    (process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined) ||
-    'http://localhost:8080'
+  // Configurable backend base URL (public env var, available in client builds)
+  // This must be set for deployed environments.
+  const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined
+
+  if (!API_BASE) {
+    throw new Error(
+      'Missing NEXT_PUBLIC_API_BASE_URL. Set it in your environment (e.g. .env.local) to the backend base URL like https://api.example.com'
+    )
+  }
 
   const fetchConversationSummaries = async () => {
     if (!session?.access_token) return
