@@ -13,7 +13,7 @@ export default function MessageList({ messages }: MessageListProps) {
       <div className="flex-1 flex items-center justify-center px-4">
         <div className="text-center max-w-2xl">
           <h2 className="text-2xl font-bold text-foreground mb-2">
-            Welcome to Chat Agent
+            Welcome to Loop Sync Chat Agent
           </h2>
           <p className="text-muted-foreground">
             Start a conversation by typing a message below

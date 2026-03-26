@@ -28,7 +28,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="bg-card border border-border rounded-lg shadow-lg p-8">
           <div className="text-center mb-8">
-            <h1 className="text-3xl font-bold text-foreground mb-2">Chat Agent</h1>
+            <h1 className="text-3xl font-bold text-foreground mb-2">Loop Sync Chat Agent</h1>
             <p className="text-muted-foreground">
               Ask questions and get intelligent responses
             </p>
