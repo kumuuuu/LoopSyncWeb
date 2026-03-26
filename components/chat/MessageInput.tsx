@@ -52,7 +52,8 @@ export default function MessageInput({
       onSubmit={handleSubmit}
       className="border-t border-border bg-card p-4"
     >
-      <div className="max-w-4xl mx-auto flex gap-3">
+      <div className="w-full">
+        <div className="mx-auto max-w-4xl flex gap-3">
         <div className="flex-1 flex items-end gap-2">
           <textarea
             ref={textareaRef}
@@ -107,6 +108,7 @@ export default function MessageInput({
             </span>
           )}
         </Button>
+        </div>
       </div>
     </form>
   )

@@ -1,6 +1,7 @@
 'use client'
 
 import { Button } from '@/components/ui/button'
+import { SidebarTrigger } from '@/components/ui/sidebar'
 import type { User } from '@supabase/supabase-js'
 
 interface ChatHeaderProps {
@@ -25,8 +26,9 @@ export default function ChatHeader({
 
   return (
     <header className="border-b border-border bg-card">
-      <div className="max-w-4xl mx-auto px-4 py-4 flex items-center justify-between">
+      <div className="w-full px-4 py-4 flex items-center justify-between">
         <div className="flex items-center gap-3">
+          <SidebarTrigger />
           <h1 className="text-2xl font-bold text-foreground">Chat Agent</h1>
         </div>
 

@@ -10,8 +10,8 @@ interface MessageListProps {
 export default function MessageList({ messages }: MessageListProps) {
   if (messages.length === 0) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="text-center">
+      <div className="flex-1 flex items-center justify-center px-4">
+        <div className="text-center max-w-2xl">
           <h2 className="text-2xl font-bold text-foreground mb-2">
             Welcome to Chat Agent
           </h2>
@@ -25,13 +25,15 @@ export default function MessageList({ messages }: MessageListProps) {
 
   return (
     <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-4 py-6 space-y-4">
+      <div className="w-full px-4 py-6">
+        <div className="mx-auto max-w-4xl space-y-4">
         {messages.map((message) => (
           <MessageBubble
             key={message.id}
             message={message}
           />
         ))}
+        </div>
       </div>
     </div>
   )

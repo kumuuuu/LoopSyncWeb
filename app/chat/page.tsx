@@ -4,8 +4,82 @@ import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import ChatHeader from '@/components/chat/ChatHeader'
+import ChatSidebar, { SidebarInset } from '@/components/chat/ChatSidebar'
 import MessageList from '@/components/chat/MessageList'
 import MessageInput from '@/components/chat/MessageInput'
+import { SidebarProvider, useSidebar } from '@/components/ui/sidebar'
+
+type Conversation = {
+  id: string
+  title: string
+  updatedAt: number
+  messages: Message[]
+}
+
+type ConversationSummary = {
+  id: string | number
+  title: string | null
+  updatedAt: string | number
+  createdAt?: string | number
+  lastMessagePreview?: string | null
+  messageCount?: number
+}
+
+function normalizeConversationId(id: unknown): string | null {
+  if (typeof id === 'string' && id.trim()) return id
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id)
+  return null
+}
+
+function safeParseJSON<T>(value: string | null): T | null {
+  if (!value) return null
+  try {
+    return JSON.parse(value) as T
+  } catch {
+    return null
+  }
+}
+
+function deriveTitleFromMessages(msgs: Message[]): string {
+  const firstUser = msgs.find((m) => m.role === 'user' && (m.content || '').trim().length > 0)
+  const raw = (firstUser?.content || 'New chat').trim().replace(/\s+/g, ' ')
+  return raw.length > 40 ? `${raw.slice(0, 40)}…` : raw
+}
+
+function reviveConversation(raw: any): Conversation | null {
+  if (!raw || typeof raw !== 'object') return null
+  if (typeof raw.id !== 'string') return null
+  const messages: Message[] = Array.isArray(raw.messages)
+    ? raw.messages
+        .map((m: any) => {
+          if (!m || typeof m !== 'object') return null
+          if (typeof m.id !== 'string') return null
+          if (typeof m.content !== 'string') return null
+          if (m.role !== 'user' && m.role !== 'assistant') return null
+          return {
+            id: m.id,
+            content: m.content,
+            role: m.role,
+            timestamp: new Date(m.timestamp || Date.now()),
+            meta: m.meta,
+          } satisfies Message
+        })
+        .filter(Boolean) as Message[]
+    : []
+
+  const title = typeof raw.title === 'string' && raw.title.trim() ? raw.title : deriveTitleFromMessages(messages)
+  const updatedAt = typeof raw.updatedAt === 'number' ? raw.updatedAt : Date.now()
+  return { id: raw.id, title, updatedAt, messages }
+}
+
+function parseUpdatedAt(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return value
+  if (typeof value === 'string') {
+    const d = Date.parse(value)
+    if (!Number.isNaN(d)) return d
+  }
+  return Date.now()
+}
 
 export interface Message {
   id: string
@@ -40,6 +114,9 @@ export default function ChatPage() {
   const { session, loading, user, signOut } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [conversationId, setConversationId] = useState<number | null>(null)
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null)
+  const [conversations, setConversations] = useState<Conversation[]>([])
+  const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [initialized, setInitialized] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -48,6 +125,41 @@ export default function ChatPage() {
   const API_BASE =
     (process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined) ||
     'http://localhost:8080'
+
+  const fetchConversationSummaries = async () => {
+    if (!session?.access_token) return
+    try {
+      const res = await fetch(`${API_BASE}/api/conversations?limit=50`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+      if (!res.ok) throw new Error(`Failed to load conversations (${res.status})`)
+      const data = (await res.json()) as ConversationSummary[]
+      console.log('Conversations (backend response):', data)
+      const normalized = Array.isArray(data)
+        ? data
+            .map((c) => {
+              const id = normalizeConversationId((c as any)?.id)
+              if (!id) return null
+              const rawTitle = (c as any)?.title
+              const title = (typeof rawTitle === 'string' && rawTitle.trim()) ? rawTitle : `Chat #${id}`
+              return {
+                id,
+                title,
+                updatedAt: parseUpdatedAt((c as any)?.updatedAt),
+                messages: [],
+              } satisfies Conversation
+            })
+            .filter(Boolean) as Conversation[]
+        : []
+      normalized.sort((a, b) => b.updatedAt - a.updatedAt)
+      setConversations(normalized)
+    } catch (e) {
+      console.error('Failed to fetch conversations:', e)
+    }
+  }
 
   // Initialize user on backend
   useEffect(() => {
@@ -87,8 +199,22 @@ export default function ChatPage() {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // Fetch conversation list once we have a session
+  useEffect(() => {
+    if (!session?.access_token) return
+    fetchConversationSummaries()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.access_token])
+
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || !session?.access_token) return
+
+    // Ensure there is an active conversation
+    let convId = activeConversationId
+    if (!convId) {
+      convId = crypto.randomUUID()
+      setActiveConversationId(convId)
+    }
 
     // Add user message to UI immediately
     const userMessageId = Date.now().toString()
@@ -219,8 +345,22 @@ export default function ChatPage() {
   }
 
   const handleNewChat = () => {
+    const newId = crypto.randomUUID()
+    setActiveConversationId(newId)
     setMessages([])
     setConversationId(null)
+    setSidebarOpen(false)
+  }
+
+  const handleSelectConversation = (id: string) => {
+    const found = conversations.find((c) => c.id === id)
+    if (!found) return
+    setActiveConversationId(found.id)
+    // Messages will come from backend via GET /api/conversations/{id} once implemented.
+    // For now, switch active conversation and clear the current messages view.
+    setMessages([])
+    setConversationId(null)
+    setSidebarOpen(false)
   }
 
   if (loading || !initialized) {
@@ -236,15 +376,65 @@ export default function ChatPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background flex flex-col">
-      <ChatHeader user={user} onNewChat={handleNewChat} onSignOut={signOut} />
+    <SidebarProvider open={sidebarOpen} onOpenChange={setSidebarOpen} defaultOpen={false}>
+      <ChatShell
+        user={user}
+        onNewChat={handleNewChat}
+        onSignOut={signOut}
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onSelectConversation={handleSelectConversation}
+      >
+        <main className="flex-1 flex min-w-0 flex-col">
+          <MessageList messages={messages} />
+          <div ref={messagesEndRef} />
+          <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+        </main>
+      </ChatShell>
+    </SidebarProvider>
+  )
+}
 
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <MessageList messages={messages} />
-        <div ref={messagesEndRef} />
-      </div>
+function ChatShell({
+  user,
+  onNewChat,
+  onSignOut,
+  conversations,
+  activeConversationId,
+  onSelectConversation,
+  children,
+}: {
+  user: any
+  onNewChat: () => void
+  onSignOut: () => Promise<void>
+  conversations: Conversation[]
+  activeConversationId: string | null
+  onSelectConversation: (id: string) => void
+  children: React.ReactNode
+}) {
+  const { isMobile, open, setOpen } = useSidebar()
 
-      <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+  return (
+    <div className="min-h-screen bg-background flex w-full">
+      <ChatSidebar
+        onNewChat={onNewChat}
+        conversations={conversations}
+        activeConversationId={activeConversationId}
+        onSelectConversation={onSelectConversation}
+      />
+
+      <SidebarInset
+        onMouseDown={(e) => {
+          if (isMobile) return
+          if (!open) return
+          // Clicking anywhere in the inset closes the offcanvas sidebar.
+          // We intentionally keep it simple (no portals/refs) to match the current UI kit behavior.
+          setOpen(false)
+        }}
+      >
+        <ChatHeader user={user} onNewChat={onNewChat} onSignOut={onSignOut} />
+        {children}
+      </SidebarInset>
     </div>
   )
 }
