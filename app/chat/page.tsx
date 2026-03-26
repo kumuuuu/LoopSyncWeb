@@ -12,6 +12,27 @@ export interface Message {
   content: string
   role: 'user' | 'assistant'
   timestamp: Date
+  meta?: {
+    ambiguities?: Ambiguity[]
+  }
+}
+
+export type AmbiguityClass = 'A' | 'B' | 'C' | 'D'
+
+export interface AmbiguitySpan {
+  class: AmbiguityClass
+  start: number
+  end: number
+  text: string
+  source?: string | null
+}
+
+export interface Ambiguity {
+  sentence: string
+  sentence_index: number
+  classes: AmbiguityClass[]
+  class_confidence: Record<AmbiguityClass, number>
+  spans: AmbiguitySpan[]
 }
 
 export default function ChatPage() {
@@ -70,8 +91,9 @@ export default function ChatPage() {
     if (!content.trim() || !session?.access_token) return
 
     // Add user message to UI immediately
+    const userMessageId = Date.now().toString()
     const userMessage: Message = {
-      id: Date.now().toString(),
+      id: userMessageId,
       content,
       role: 'user',
       timestamp: new Date(),
@@ -149,10 +171,30 @@ export default function ChatPage() {
           setConversationId(data.conversationId)
         }
 
+        // If backend returned ambiguity analysis, attach it to the *user* message
+        // (the user text is what contains the ambiguous spans).
+        const ambiguities = (data?.analysis?.ambiguities || undefined) as
+          | Message['meta']['ambiguities']
+          | undefined
+        if (ambiguities) {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === userMessageId ? { ...m, meta: { ...(m.meta || {}), ambiguities } } : m
+            )
+          )
+        }
+
         // Add assistant message
         const assistantMessage: Message = {
           id: (Date.now() + 1).toString(),
-          content: data.response || data.content || 'No response received',
+          // Prefer the backend's explicit LLM output field.
+          // Fallbacks cover other possible backend shapes.
+          content:
+            data.llmOutput ||
+            data.response ||
+            data.content ||
+            data.message ||
+            (typeof data === 'string' ? data : 'No response received'),
           role: 'assistant',
           timestamp: new Date(),
         }
