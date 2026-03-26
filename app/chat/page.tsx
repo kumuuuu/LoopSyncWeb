@@ -25,6 +25,20 @@ type ConversationSummary = {
   messageCount?: number
 }
 
+type ConversationDetailResponse = {
+  id: string | number
+  title: string | null
+  createdAt?: string
+  updatedAt?: string
+  messages: Array<{
+    id: string | number
+    role: 'user' | 'assistant'
+    content: string
+    timestamp: string
+    meta?: Message['meta']
+  }>
+}
+
 function normalizeConversationId(id: unknown): string | null {
   if (typeof id === 'string' && id.trim()) return id
   if (typeof id === 'number' && Number.isFinite(id)) return String(id)
@@ -81,6 +95,23 @@ function parseUpdatedAt(value: unknown): number {
   return Date.now()
 }
 
+function parseMessageTimestamp(value: unknown): Date {
+  if (typeof value === 'string') {
+    const d = new Date(value)
+    if (!Number.isNaN(d.getTime())) return d
+  }
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return new Date(value)
+  }
+  return new Date()
+}
+
+function normalizeMessageId(id: unknown): string {
+  if (typeof id === 'string' && id.trim()) return id
+  if (typeof id === 'number' && Number.isFinite(id)) return String(id)
+  return crypto.randomUUID()
+}
+
 export interface Message {
   id: string
   content: string
@@ -118,6 +149,8 @@ export default function ChatPage() {
   const [conversations, setConversations] = useState<Conversation[]>([])
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false)
+  const [conversationLoadError, setConversationLoadError] = useState<string | null>(null)
   const [initialized, setInitialized] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
@@ -158,6 +191,52 @@ export default function ChatPage() {
       setConversations(normalized)
     } catch (e) {
       console.error('Failed to fetch conversations:', e)
+    }
+  }
+
+  const fetchConversationDetail = async (id: string) => {
+    if (!session?.access_token) return
+    setIsLoadingConversation(true)
+    setConversationLoadError(null)
+    try {
+      const res = await fetch(`${API_BASE}/api/conversations/${encodeURIComponent(id)}`, {
+        method: 'GET',
+        headers: {
+          Authorization: `Bearer ${session.access_token}`,
+        },
+      })
+      if (!res.ok) throw new Error(`Failed to load conversation (${res.status})`)
+      const data = (await res.json()) as ConversationDetailResponse
+      console.log('Conversation detail (backend response):', data)
+
+      const loadedMessages: Message[] = Array.isArray((data as any)?.messages)
+        ? (data as any).messages
+            .filter((m: any) => m && (m.role === 'user' || m.role === 'assistant'))
+            .map((m: any) => ({
+              id: normalizeMessageId(m.id),
+              role: m.role,
+              content: typeof m.content === 'string' ? m.content : String(m.content ?? ''),
+              timestamp: parseMessageTimestamp(m.timestamp ?? m.createdAt),
+              meta: m.meta,
+            }))
+        : []
+
+      setMessages(loadedMessages)
+
+      // Also set the numeric conversationId used by POST /api/messages (if possible)
+      const numericId = typeof (data as any)?.id === 'number' ? (data as any).id : Number((data as any)?.id)
+      if (Number.isFinite(numericId)) {
+        setConversationId(numericId)
+      } else {
+        setConversationId(null)
+      }
+    } catch (e: any) {
+      console.error('Failed to fetch conversation detail:', e)
+      setConversationLoadError(e?.message || 'Failed to load conversation')
+      setMessages([])
+      setConversationId(null)
+    } finally {
+      setIsLoadingConversation(false)
     }
   }
 
@@ -356,10 +435,7 @@ export default function ChatPage() {
     const found = conversations.find((c) => c.id === id)
     if (!found) return
     setActiveConversationId(found.id)
-    // Messages will come from backend via GET /api/conversations/{id} once implemented.
-    // For now, switch active conversation and clear the current messages view.
-    setMessages([])
-    setConversationId(null)
+    fetchConversationDetail(found.id)
     setSidebarOpen(false)
   }
 
@@ -386,9 +462,14 @@ export default function ChatPage() {
         onSelectConversation={handleSelectConversation}
       >
         <main className="flex-1 flex min-w-0 flex-col">
+          {conversationLoadError && (
+            <div className="px-4 py-3 text-sm text-destructive">
+              {conversationLoadError}
+            </div>
+          )}
           <MessageList messages={messages} />
           <div ref={messagesEndRef} />
-          <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading} />
+          <MessageInput onSendMessage={handleSendMessage} isLoading={isLoading || isLoadingConversation} />
         </main>
       </ChatShell>
     </SidebarProvider>
