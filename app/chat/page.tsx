@@ -548,9 +548,8 @@ export default function ChatPage() {
 
         // If backend returned ambiguity analysis, attach it to the *user* message
         // (the user text is what contains the ambiguous spans).
-        const ambiguities = (data?.analysis?.ambiguities || undefined) as
-          | Message['meta']['ambiguities']
-          | undefined
+        type Ambiguities = NonNullable<Message['meta']>['ambiguities']
+        const ambiguities = (data?.analysis?.ambiguities || undefined) as Ambiguities | undefined
         if (ambiguities) {
           setMessages((prev) =>
             prev.map((m) =>

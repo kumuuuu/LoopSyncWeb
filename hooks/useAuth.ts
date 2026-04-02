@@ -37,7 +37,7 @@ import type { Session } from '@supabase/supabase-js'
 export function useAuth() {
   const [session, setSession] = useState<Session | null>(null)
   const [loading, setLoading] = useState(true)
-  const [user, setUser] = useState(null)
+  const [user, setUser] = useState<Session['user'] | null>(null)
 
   useEffect(() => {
     // Perform initial session check once on mount.
@@ -62,7 +62,7 @@ export function useAuth() {
     // Keep local state in sync with Supabase auth events.
     const {
       data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
+    } = supabase.auth.onAuthStateChange((_event: any, session: Session | null) => {
       setSession(session)
       setUser(session?.user || null)
       setLoading(false)

@@ -111,6 +111,20 @@ const addToRemoveQueue = (toastId: string) => {
   toastTimeouts.set(toastId, timeout)
 }
 
+/**
+ * Description:
+ * Pure reducer for toast state transitions.
+ *
+ * Args:
+ *     state: Current toast state.
+ *     action: State transition action.
+ *
+ * Returns:
+ *     The next toast state.
+ *
+ * Notes:
+ * - `DISMISS_TOAST` schedules removals via `addToRemoveQueue`.
+ */
 export const reducer = (state: State, action: Action): State => {
   switch (action.type) {
     case 'ADD_TOAST':
@@ -130,8 +144,7 @@ export const reducer = (state: State, action: Action): State => {
     case 'DISMISS_TOAST': {
       const { toastId } = action
 
-      // ! Side effects ! - This could be extracted into a dismissToast() action,
-      // but I'll keep it here for simplicity
+      // `DISMISS_TOAST` triggers removal scheduling; keeping it here keeps the public API small.
       if (toastId) {
         addToRemoveQueue(toastId)
       } else {
@@ -146,26 +159,14 @@ export const reducer = (state: State, action: Action): State => {
           t.id === toastId || toastId === undefined
             ? {
                 ...t,
-                /**
-                 * Description:
-                 * Pure reducer for toast state transitions.
-                 *
-                 * Args:
-                 *     state: Current toast state.
-                 *     action: State transition action.
-                 *
-                 * Returns:
-                 *     The next toast state.
-                 *
-                 * Notes:
-                 * - `DISMISS_TOAST` schedules removals via `addToRemoveQueue`.
-                 */
                 open: false,
               }
             : t,
         ),
       }
-                      // `DISMISS_TOAST` triggers removal scheduling; keeping it here keeps the public API small.
+    }
+
+    case 'REMOVE_TOAST':
       if (action.toastId === undefined) {
         return {
           ...state,
