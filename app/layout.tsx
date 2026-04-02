@@ -1,3 +1,18 @@
+/**
+ * File: app/layout.tsx
+ *
+ * Description:
+ * Next.js root layout for the application.
+ *
+ * Responsibilities:
+ * - Define global metadata (title, description, icons)
+ * - Load global styles and fonts
+ * - Wrap all pages in the root HTML/body structure
+ *
+ * Used in:
+ * - Next.js App Router root layout (applies to all routes)
+ */
+
 import React from "react"
 import type { Metadata } from 'next'
 import { Geist, Geist_Mono } from 'next/font/google'
@@ -29,6 +44,19 @@ export const metadata: Metadata = {
   },
 }
 
+/**
+ * Description:
+ * Renders the root HTML scaffold for all pages.
+ *
+ * Args:
+ *     children: The page content for the current route.
+ *
+ * Returns:
+ *     The app's root HTML/layout wrapper.
+ *
+ * Notes:
+ * - This is a server component layout; avoid client-only hooks here.
+ */
 export default function RootLayout({
   children,
 }: Readonly<{

@@ -1,5 +1,21 @@
 'use client'
 
+/**
+ * File: app/chat/page.tsx
+ *
+ * Description:
+ * Chat UI page that integrates authentication, conversation history, and message
+ * streaming/non-streaming responses from a backend API.
+ *
+ * Responsibilities:
+ * - Load/normalize conversation summaries and message history
+ * - Send user messages and render assistant responses (streaming when available)
+ * - Coordinate the sidebar layout and mobile behavior
+ *
+ * Used in:
+ * - Route: `/chat`
+ */
+
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
@@ -39,12 +55,38 @@ type ConversationDetailResponse = {
   }>
 }
 
+/**
+ * Description:
+ * Normalizes an unknown conversation identifier into a non-empty string.
+ *
+ * Args:
+ *     id: Raw id returned from persistence or backend responses.
+ *
+ * Returns:
+ *     A normalized string id, or null if the id is not usable.
+ *
+ * Notes:
+ * - Allows both numeric ids (converted to strings) and string ids.
+ */
 function normalizeConversationId(id: unknown): string | null {
   if (typeof id === 'string' && id.trim()) return id
   if (typeof id === 'number' && Number.isFinite(id)) return String(id)
   return null
 }
 
+/**
+ * Description:
+ * Safely parses JSON from a string value.
+ *
+ * Args:
+ *     value: JSON string or null.
+ *
+ * Returns:
+ *     Parsed object of type T, or null if parsing fails.
+ *
+ * Notes:
+ * - Useful when consuming persisted/localStorage values that may be corrupt.
+ */
 function safeParseJSON<T>(value: string | null): T | null {
   if (!value) return null
   try {
@@ -54,12 +96,38 @@ function safeParseJSON<T>(value: string | null): T | null {
   }
 }
 
+/**
+ * Description:
+ * Builds a user-friendly conversation title from the first meaningful user message.
+ *
+ * Args:
+ *     msgs: Conversation message list.
+ *
+ * Returns:
+ *     A short title suitable for sidebar display.
+ *
+ * Notes:
+ * - Title length is capped to keep the sidebar readable.
+ */
 function deriveTitleFromMessages(msgs: Message[]): string {
   const firstUser = msgs.find((m) => m.role === 'user' && (m.content || '').trim().length > 0)
   const raw = (firstUser?.content || 'New chat').trim().replace(/\s+/g, ' ')
   return raw.length > 40 ? `${raw.slice(0, 40)}…` : raw
 }
 
+/**
+ * Description:
+ * Validates and converts a loosely-typed stored conversation into the internal shape.
+ *
+ * Args:
+ *     raw: Untrusted data (e.g., from storage or a remote response).
+ *
+ * Returns:
+ *     A Conversation object, or null if the input cannot be revived safely.
+ *
+ * Notes:
+ * - Performs defensive checks to avoid runtime crashes from malformed data.
+ */
 function reviveConversation(raw: any): Conversation | null {
   if (!raw || typeof raw !== 'object') return null
   if (typeof raw.id !== 'string') return null
@@ -86,6 +154,19 @@ function reviveConversation(raw: any): Conversation | null {
   return { id: raw.id, title, updatedAt, messages }
 }
 
+/**
+ * Description:
+ * Converts an updatedAt value into a sortable numeric timestamp.
+ *
+ * Args:
+ *     value: Unknown timestamp value (number or string).
+ *
+ * Returns:
+ *     Epoch milliseconds.
+ *
+ * Notes:
+ * - Falls back to `Date.now()` when parsing fails.
+ */
 function parseUpdatedAt(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return value
   if (typeof value === 'string') {
@@ -95,6 +176,19 @@ function parseUpdatedAt(value: unknown): number {
   return Date.now()
 }
 
+/**
+ * Description:
+ * Normalizes a message timestamp into a Date instance.
+ *
+ * Args:
+ *     value: Timestamp value from backend (string) or storage (number).
+ *
+ * Returns:
+ *     A Date (always valid).
+ *
+ * Notes:
+ * - Uses current time as a last-resort fallback.
+ */
 function parseMessageTimestamp(value: unknown): Date {
   if (typeof value === 'string') {
     const d = new Date(value)
@@ -106,6 +200,19 @@ function parseMessageTimestamp(value: unknown): Date {
   return new Date()
 }
 
+/**
+ * Description:
+ * Converts unknown ids into a stable string id for React rendering.
+ *
+ * Args:
+ *     id: Raw id value.
+ *
+ * Returns:
+ *     A non-empty string id.
+ *
+ * Notes:
+ * - Generates a UUID when the backend doesn't provide a usable id.
+ */
 function normalizeMessageId(id: unknown): string {
   if (typeof id === 'string' && id.trim()) return id
   if (typeof id === 'number' && Number.isFinite(id)) return String(id)
@@ -140,6 +247,17 @@ export interface Ambiguity {
   spans: AmbiguitySpan[]
 }
 
+/**
+ * Description:
+ * Main authenticated chat experience page.
+ *
+ * Returns:
+ *     The chat UI wrapped in the sidebar layout.
+ *
+ * Notes:
+ * - Requires `NEXT_PUBLIC_API_BASE_URL` to be configured at build/runtime.
+ * - Redirects unauthenticated users back to `/`.
+ */
 export default function ChatPage() {
   const router = useRouter()
   const { session, loading, user, signOut } = useAuth()
@@ -154,8 +272,7 @@ export default function ChatPage() {
   const [initialized, setInitialized] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  // Configurable backend base URL (public env var, available in client builds)
-  // This must be set for deployed environments.
+  // Backend base URL comes from a public env var (available in client builds).
   const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL as string | undefined
 
   if (!API_BASE) {
@@ -164,6 +281,17 @@ export default function ChatPage() {
     )
   }
 
+  /**
+   * Description:
+   * Loads recent conversation summaries from the backend and normalizes them for UI use.
+   *
+   * Returns:
+   *     A Promise that resolves once component state is updated.
+   *
+   * Notes:
+   * - Requires a valid access token.
+   * - Sorts conversations by `updatedAt` descending for sidebar display.
+   */
   const fetchConversationSummaries = async () => {
     if (!session?.access_token) return
     try {
@@ -199,6 +327,19 @@ export default function ChatPage() {
     }
   }
 
+  /**
+   * Description:
+   * Fetches a single conversation's messages and updates the message list in state.
+   *
+   * Args:
+   *     id: Conversation identifier.
+   *
+   * Returns:
+   *     A Promise that resolves once loading state is settled.
+   *
+   * Notes:
+   * - Converts backend timestamps into `Date` objects for rendering.
+   */
   const fetchConversationDetail = async (id: string) => {
     if (!session?.access_token) return
     setIsLoadingConversation(true)
@@ -245,8 +386,18 @@ export default function ChatPage() {
     }
   }
 
-  // Initialize user on backend
+  // Initialize the authenticated user on the backend before starting chats.
   useEffect(() => {
+    /**
+     * Description:
+     * Ensures the backend has a corresponding user record for the current session.
+     *
+     * Returns:
+     *     A Promise that resolves once initialization attempts complete.
+     *
+     * Notes:
+     * - This runs after auth is ready; failures are logged but do not block UI.
+     */
     const initializeUser = async () => {
       if (!session?.access_token) return
 
@@ -278,18 +429,32 @@ export default function ChatPage() {
     }
   }, [session, loading, router])
 
-  // Auto-scroll to bottom
+  // Keep the latest message visible as new content arrives.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // Fetch conversation list once we have a session
+  // Load the conversation list once we have an access token.
   useEffect(() => {
     if (!session?.access_token) return
     fetchConversationSummaries()
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [session?.access_token])
 
+  /**
+   * Description:
+   * Sends a user message to the backend and appends assistant output to the UI.
+   *
+   * Args:
+   *     content: Raw user input.
+   *
+   * Returns:
+   *     A Promise that resolves once the request completes and loading clears.
+   *
+   * Notes:
+   * - Supports streaming responses when the backend returns a non-JSON body.
+   * - Attaches ambiguity analysis metadata (if present) to the corresponding user message.
+   */
   const handleSendMessage = async (content: string) => {
     if (!content.trim() || !session?.access_token) return
 
@@ -357,11 +522,11 @@ export default function ChatPage() {
             }
           }
         } finally {
-          // ensure reader is released
+          // Ensure the reader is released even if streaming errors.
           try {
             reader.releaseLock?.()
           } catch (e) {
-            // ignore
+            // Ignore cleanup errors.
           }
         }
 
@@ -428,6 +593,13 @@ export default function ChatPage() {
     }
   }
 
+  /**
+   * Description:
+   * Starts a fresh conversation locally (clears messages and ids).
+   *
+   * Returns:
+   *     void
+   */
   const handleNewChat = () => {
     const newId = crypto.randomUUID()
     setActiveConversationId(newId)
@@ -436,6 +608,16 @@ export default function ChatPage() {
     setSidebarOpen(false)
   }
 
+  /**
+   * Description:
+   * Activates a conversation from the sidebar and loads its messages.
+   *
+   * Args:
+   *     id: Conversation identifier selected in the sidebar.
+   *
+   * Returns:
+   *     void
+   */
   const handleSelectConversation = (id: string) => {
     const found = conversations.find((c) => c.id === id)
     if (!found) return
@@ -481,6 +663,25 @@ export default function ChatPage() {
   )
 }
 
+/**
+ * Description:
+ * Shared layout wrapper that composes the sidebar + header around the chat content.
+ *
+ * Args:
+ *     user: Authenticated user object (shape determined by Supabase).
+ *     onNewChat: Starts a new chat.
+ *     onSignOut: Signs the current user out.
+ *     conversations: List of known conversations.
+ *     activeConversationId: Currently selected conversation id.
+ *     onSelectConversation: Handler when a conversation is selected.
+ *     children: Main content area (message list + input).
+ *
+ * Returns:
+ *     The composed shell UI.
+ *
+ * Notes:
+ * - Clicking the inset closes the sidebar on non-mobile when open.
+ */
 function ChatShell({
   user,
   onNewChat,

@@ -1,10 +1,34 @@
 'use client'
 
+/**
+ * File: app/page.tsx
+ *
+ * Description:
+ * Login/landing page that authenticates the user via Google (Supabase OAuth).
+ *
+ * Responsibilities:
+ * - Display a login CTA
+ * - Redirect authenticated users to the chat route
+ *
+ * Used in:
+ * - Route: `/` (entry point before accessing `/chat`)
+ */
+
 import { useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { useAuth } from '@/hooks/useAuth'
 import { Button } from '@/components/ui/button'
 
+/**
+ * Description:
+ * Renders the home page and redirects to `/chat` when a session exists.
+ *
+ * Returns:
+ *     The login UI or a loading state.
+ *
+ * Notes:
+ * - Auth state is sourced from `useAuth()`.
+ */
 export default function LoginPage() {
   const router = useRouter()
   const { session, loading, signInWithGoogle } = useAuth()

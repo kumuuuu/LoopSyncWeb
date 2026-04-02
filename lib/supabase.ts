@@ -1,24 +1,67 @@
+/**
+ * File: lib/supabase.ts
+ *
+ * Description:
+ * Creates (or safely stubs) a Supabase client used by the app's auth flows.
+ *
+ * Responsibilities:
+ * - Read Supabase connection settings from public environment variables
+ * - Export a `supabase` client that won't throw during module evaluation when env vars are missing
+ *
+ * Used in:
+ * - Auth hook: `useAuth`
+ * - Any module that needs Supabase auth methods
+ */
+
 import { createClient } from '@supabase/supabase-js'
 
-// Note: NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY is safe to expose publicly
-// This is Supabase's publishable/anon key specifically designed for client-side use
+// Supabase publishable/anon key intended for client-side usage.
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
 const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 
-// A minimal stub that provides the auth methods the app uses so importing this module
-// doesn't throw at module evaluation time when env vars are missing (useful for dev).
+// Minimal stub so importing this module doesn't throw when env vars are missing.
 const supabaseStub = {
   auth: {
+    /**
+     * Description:
+     * Stubbed session retrieval.
+     *
+     * Returns:
+     *     A resolved shape compatible with the Supabase client response.
+     */
     getSession: async () => ({ data: { session: null } }),
+    /**
+     * Description:
+     * Stubbed auth state listener.
+     *
+     * Args:
+     *     _callback: Listener callback (ignored).
+     *
+     * Returns:
+     *     A subscription-like object with an `unsubscribe` no-op.
+     */
     onAuthStateChange: (_callback: any) => ({ data: { subscription: { unsubscribe: () => {} } } }),
+    /**
+     * Description:
+     * Stubbed OAuth sign-in.
+     *
+     * Returns:
+     *     An error indicating Supabase is not configured.
+     */
     signInWithOAuth: async () => ({ error: new Error('Supabase not configured: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY') }),
+    /**
+     * Description:
+     * Stubbed sign-out.
+     *
+     * Returns:
+     *     An error indicating Supabase is not configured.
+     */
     signOut: async () => ({ error: new Error('Supabase not configured: missing NEXT_PUBLIC_SUPABASE_URL or NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY') }),
   },
 } as any
 
 if (!supabaseUrl || !supabaseKey) {
-  // Helpful runtime message for developers — this is preferable to the cryptic "supabaseUrl is required" error
-  // that comes from the official client when given an empty string.
+  // Provide a clearer dev-time warning than the default client error.
   if (typeof window !== 'undefined') {
     // Client-side runtime
     // eslint-disable-next-line no-console
